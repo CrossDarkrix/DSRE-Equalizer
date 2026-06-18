@@ -106,6 +106,9 @@ class Root(BoxLayout):
         self.activity = None
         self.starter_cls = None
         self.engine_cls = None
+        self.capture_running = False
+        self.start_button = None
+        self.stop_button = None
         with self.canvas.before:
             Color(*MATERIAL['bg'])
             self._bg = Rectangle(pos=self.pos, size=self.size)
@@ -121,7 +124,7 @@ class Root(BoxLayout):
 
     def _build_ui(self):
         header = MaterialCard(orientation='vertical', size_hint_y=None, height=dp(88), padding=dp(12))
-        header.add_widget(MaterialLabel(text='DSRE-Equalizer', font_size='22sp', bold=True, size_hint_y=None, height=dp(34)))
+        header.add_widget(MaterialLabel(text='DSRE-Equalizer v1.0.5',font_size='22sp', bold=True, size_hint_y=None,height=dp(34)))
         header.add_widget(SmallLabel(text='Quiet Assist / Wet Delta / Air Assist'))
         self.add_widget(header)
         status = MaterialCard(orientation='vertical', size_hint_y=None, height=dp(112))
@@ -155,14 +158,15 @@ class Root(BoxLayout):
         control.bind(minimum_height=control.setter('height'))
         control.add_widget(SectionTitle(text='Control'))
         row1 = BoxLayout(size_hint_y=None,height=dp(44), spacing=dp(8))
-        b1 = MaterialButton(text='Start', kind='primary')
-        b2 = MaterialButton(text='Stop', kind='danger')
-        b1.bind(on_release=lambda *_: self.start_projection_flow())
-        b2.bind(on_release=lambda *_: self.stop_service())
-        row1.add_widget(b1)
-        row1.add_widget(b2)
+        self.start_button = MaterialButton(text='Start', kind='primary')
+        self.stop_button = MaterialButton(text='Stop', kind='danger')
+        self.start_button.bind(on_release=lambda *_: self.start_projection_flow())
+        self.stop_button.bind(on_release=lambda *_: self.stop_service())
+        row1.add_widget(self.start_button)
+        row1.add_widget(self.stop_button)
         control.add_widget(row1)
         content.add_widget(control)
+        self.set_capture_running(False)
         
     def log(self,msg):
         msg = str(msg)
@@ -256,15 +260,29 @@ class Root(BoxLayout):
         self.set_ui_from_params(dict(DEFAULT_PARAMS))
         self.save_params_only()
 
+    def set_capture_running(self, running):
+        self.capture_running = bool(running)
+        if self.start_button is not None:
+            self.start_button.disabled = self.capture_running
+            self.start_button.opacity = 0.45 if self.capture_running else 1.0
+        if self.stop_button is not None:
+            self.stop_button.disabled = not self.capture_running
+            self.stop_button.opacity = 1.0 if self.capture_running else 0.45
+
     def start_projection_flow(self):
+        if self.capture_running:
+            self.log('Start ignored because capture is already running')
+            return
         if not is_android_runtime() or self.activity is None or self.starter_cls is None:
             return
         try:
+            self.set_capture_running(True)
             self.save_params_only()
             self.apply_params_to_running_engine()
             self.starter_cls.requestProjection(self.activity)
         except Exception as exc:
-            pass
+            self.set_capture_running(False)
+            self.log(f'Start failed: {exc}')
 
     def start_plain_service(self):
         if not is_android_runtime() or self.starter_cls is None or self.activity is None:
@@ -277,11 +295,14 @@ class Root(BoxLayout):
 
     def stop_service(self):
         if self.starter_cls is None or self.activity is None:
+            self.set_capture_running(False)
             return
         try:
             self.starter_cls.stopProjectionService(self.activity)
         except Exception as exc:
             pass
+        finally:
+            self.set_capture_running(False)
 
     def clear_java_log(self):
         if self.starter_cls is None or self.activity is None:
