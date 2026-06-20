@@ -19,6 +19,8 @@ from kivy.uix.textinput import TextInput
 
 TAG = 'DSREMain'
 CONFIG_NAME = 'mini_dsre_config.json'
+PRIVACY_POLICY_URL = 'https://crossdarkrix.f5.si/DSRE-Equalizer-PrivacyPolicy/'
+DSRE_MEDIA_PROJECTION_REQUEST_CODE = 43001
 
 MATERIAL = {
     'bg': (0.070, 0.082, 0.102, 1),
@@ -44,8 +46,136 @@ DEFAULT_PARAMS = {
     'assistGain': 0.25,
     'airMix': 0.80,
     'airHpAlpha': 0.08,
+    'quality': 1,
     'language': 'ja',
+    'activePreset': None,
 }
+
+
+PRESETS = {
+    'HiFi+ Smooth': {
+        'mode': 7,
+        'gain': 0.95,
+        'threshold': 0.60,
+        'ratio': 1.0,
+        'makeup': 0.97,
+        'satDrive': 1.56,
+        'satMix': 0.105,
+        'outputGain': 1.0,
+        'assistGain': 0.74,
+        'airMix': 0.92,
+        'airHpAlpha': 0.135,
+        'quality': 2,
+    },
+    'HiFi+ Clear': {
+        'mode': 7,
+        'gain': 0.95,
+        'threshold': 0.58,
+        'ratio': 1.0,
+        'makeup': 0.99,
+        'satDrive': 1.78,
+        'satMix': 0.145,
+        'outputGain': 1.0,
+        'assistGain': 0.80,
+        'airMix': 1.0,
+        'airHpAlpha': 0.185,
+        'quality': 2,
+    },
+    'HiFi Low CPU': {
+        'mode': 7,
+        'gain': 0.95,
+        'threshold': 0.60,
+        'ratio': 1.0,
+        'makeup': 0.98,
+        'satDrive': 1.62,
+        'satMix': 0.115,
+        'outputGain': 1.0,
+        'assistGain': 0.72,
+        'airMix': 0.88,
+        'airHpAlpha': 0.125,
+        'quality': 1,
+    },
+    'Everyday HiFi+': {
+        'mode': 7,
+        'gain': 0.95,
+        'threshold': 0.60,
+        'ratio': 1.0,
+        'makeup': 0.98,
+        'satDrive': 1.69,
+        'satMix': 0.13,
+        'outputGain': 1.0,
+        'assistGain': 0.78,
+        'airMix': 1.0,
+        'airHpAlpha': 0.155,
+        'quality': 2,
+    },
+    'Everyday HiFi': {
+        'mode': 7,
+        'gain': 0.95,
+        'threshold': 0.60,
+        'ratio': 1.0,
+        'makeup': 0.98,
+        'satDrive': 1.69,
+        'satMix': 0.13,
+        'outputGain': 1.0,
+        'assistGain': 0.78,
+        'airMix': 1.0,
+        'airHpAlpha': 0.155,
+        'quality': 1,
+    },
+    'Everyday Normal': {
+        'mode': 7,
+        'gain': 0.95,
+        'threshold': 0.60,
+        'ratio': 1.0,
+        'makeup': 0.98,
+        'satDrive': 1.69,
+        'satMix': 0.13,
+        'outputGain': 1.0,
+        'assistGain': 0.78,
+        'airMix': 1.0,
+        'airHpAlpha': 0.155,
+        'quality': 0,
+    },
+    'Natural Air': {
+        'mode': 8,
+        'gain': 0.30,
+        'threshold': 0.14,
+        'ratio': 2.20,
+        'makeup': 1.05,
+        'satDrive': 1.22,
+        'satMix': 0.16,
+        'outputGain': 1.0,
+        'assistGain': 0.25,
+        'airMix': 0.80,
+        'airHpAlpha': 0.08,
+        'quality': 0,
+    },
+}
+
+PRESET_ALIASES = {
+    'HiFi+': 'Everyday HiFi+',
+    'Everyday HiFi+': 'Everyday HiFi+',
+    'HiFi': 'Everyday HiFi',
+    'Everyday HiFi': 'Everyday HiFi',
+    'Normal': 'Everyday Normal',
+    'Everyday Normal': 'Everyday Normal',
+    'Natural': 'Natural Air',
+    'Natural Air': 'Natural Air',
+    'Smooth': 'HiFi+ Smooth',
+    'HiFi+ Smooth': 'HiFi+ Smooth',
+    'Clear': 'HiFi+ Clear',
+    'HiFi+ Clear': 'HiFi+ Clear',
+    'LowCPU': 'HiFi Low CPU',
+    'HiFi Low CPU': 'HiFi Low CPU',
+}
+
+
+def normalize_preset_name(preset_name):
+    if preset_name in PRESETS:
+        return preset_name
+    return PRESET_ALIASES.get(preset_name)
+
 
 PARAM_SPECS = {
     'mode':        {'min': 6.0,   'max': 8.0,  'step': 1.0,   'decimals': 0, 'integer': True},
@@ -59,16 +189,28 @@ PARAM_SPECS = {
     'assistGain':  {'min': 0.0,   'max': 1.0,  'step': 0.01,  'decimals': 2, 'integer': False},
     'airMix':      {'min': 0.0,   'max': 1.0,  'step': 0.01,  'decimals': 2, 'integer': False},
     'airHpAlpha':  {'min': 0.005, 'max': 0.50, 'step': 0.005, 'decimals': 3, 'integer': False},
+    'quality':     {'min': 0.0,   'max': 2.0,  'step': 1.0,   'decimals': 0, 'integer': True},
 }
 
 I18N = {
     'ja': {
-        'app_title': 'DSRE-Equalizer v1.0.5',
+        'app_title': 'DSRE-Equalizer',
         'subtitle': 'Quiet Assist / Wet Delta / Air Assist',
         'status': 'ステータス',
         'ready': '待機中',
         'param_section': 'Wet Assist パラメータ',
-        'mode_help': 'Mode: 6=Full, 7=Wet Delta, 8=Air Assist',
+        'mode_help': 'Mode: 6=Full / 7=Wet Delta / 8=Air Assist\nQuality: 0=Normal / 1=HiFi / 2=HiFi+',
+'preset_section': 'プリセット',
+        'preset_everyday_hifi_plus': 'HiFi+',
+        'preset_hifi_plus_smooth': 'Smooth',
+        'preset_hifi_plus_clear': 'Clear',
+        'preset_hifi_low_cpu': 'LowCPU',
+        'preset_hifi_plus_smooth': 'Smooth',
+        'preset_hifi_plus_clear': 'Clear',
+        'preset_hifi_low_cpu': 'LowCPU',
+'preset_everyday_hifi': 'HiFi',
+'preset_everyday_normal': 'Normal',
+'preset_natural_air': 'Natural',
         'control': '操作',
         'save': '保存',
         'apply': '適用',
@@ -80,8 +222,14 @@ I18N = {
             'DSRE-Equalizerは、\nAndroid上で再生中の音声を取得し、\nWet Delta / Air Assistによる\n補助音を薄く重ねる\nリアルタイム音響処理アプリです。\n\n'
             'このアプリは元の音声を完全に置き換えるものではありません。\n元アプリの再生音に対して、加工で発生した差分成分や高域寄りの補助成分を小さく足すことで、\n二重音を抑えながら明瞭感を加えることを目的にしています。\n\n'
             '推奨モードは Mode 8 です。\n二重感が強い場合はAssist Gainを下げ、\n効果が薄い場合は少しずつ上げてください。'
-            'DSRE-Equalizerは音声データを外部に送信しません。\nインターネット権限を使用せず、\n設定は端末内部のアプリ専用領域に保存されます。'
         ),
+        'privacy_policy_title': 'プライバシーポリシー',
+        'privacy_policy_body': (
+            '本アプリは、取得した音声データを外部サーバーへ送信せず、端末内で処理します。\n'
+            'アプリ設定は端末内のアプリ専用領域に保存されます。\n'
+            '詳細は以下のプライバシーポリシーをご確認ください。'
+        ),
+        'privacy_policy_url_label': 'URL',
         'language': '言語設定',
         'japanese': '日本語',
         'english': 'English',
@@ -94,11 +242,15 @@ I18N = {
         'start_failed': '開始に失敗しました',
         'stop_requested': '停止しました',
         'activity_unavailable': 'Activity/Starter が利用できません',
+        'projection_cancelled': '画面共有がキャンセルされました',
+        'projection_allowed': '画面共有が許可されました',
+        'projection_no_result': '画面共有の結果を取得できませんでした',
         'start_consent_title': '画面共有と音声処理の確認',
         'start_consent_body': (
             '開始する前に、Androidの画面共有確認では共有対象を「画面全体」にしてください。\n\n'
-            'DSRE-Equalizerは、端末上で再生中の音声を取得して、端末内でWet Delta / Air Assist処理を行います。\n\n'
-            '取得した音声データを外部サーバーへ送信する設計ではありません。音声処理は端末内で行われ、設定はアプリ専用領域に保存されます。\n\n'
+            'DSRE-Equalizerは、\n端末上で再生中の音声を取得して、\n端末内でWet Delta / Air Assist処理を行います。\n\n'
+            '取得した音声データは\n外部サーバーへ送信しません。\n音声処理は端末内で行われ、設定はアプリ専用領域に保存されます。\n\n'
+            '処理中は、DSRE-Equalizerが動作中であることと主要パラメータを通知に表示します。\n\n'
             '内容を確認したらOKを押して、Androidの画面共有許可へ進んでください。'
         ),
         'ok': 'OK',
@@ -114,14 +266,20 @@ I18N = {
         'param_assistGain': '補助ゲイン',
         'param_airMix': 'Air Mix',
         'param_airHpAlpha': 'Air HP Alpha',
+'param_quality': '品質',
     },
     'en': {
-        'app_title': 'DSRE-Equalizer v1.0.5',
+        'app_title': 'DSRE-Equalizer',
         'subtitle': 'Quiet Assist / Wet Delta / Air Assist',
         'status': 'Status',
         'ready': 'Ready',
         'param_section': 'Wet Assist Parameters',
-        'mode_help': 'Mode: 6=Full, 7=Wet Delta, 8=Air Assist',
+        'mode_help': 'Mode: 6=Full / 7=Wet Delta / 8=Air Assist\nQuality: 0=Normal / 1=HiFi / 2=HiFi+',
+'preset_section': 'Preset',
+        'preset_everyday_hifi_plus': 'HiFi+',
+'preset_everyday_hifi': 'Everyday HiFi',
+'preset_everyday_normal': 'Everyday Normal',
+'preset_natural_air': 'Natural',
         'control': 'Control',
         'save': 'Save',
         'apply': 'Apply',
@@ -134,6 +292,13 @@ I18N = {
             'This app does not fully replace the original playback audio. Instead, it adds a small difference or air-like assist signal derived from the processed audio, aiming to reduce doubled-audio artifacts while adding clarity.\n\n'
             'Mode 8 is recommended. If the doubled sound is noticeable, lower Assist Gain. If the effect is too subtle, increase Assist Gain gradually.'
         ),
+        'privacy_policy_title': 'Privacy Policy',
+        'privacy_policy_body': (
+            'This app processes captured audio on-device and does not send audio data to external servers.\n'
+            'App settings are saved in the app-specific storage area on this device.\n'
+            'For details, please see the Privacy Policy below.'
+        ),
+        'privacy_policy_url_label': 'URL',
         'language': 'Language',
         'japanese': '日本語',
         'english': 'English',
@@ -146,11 +311,15 @@ I18N = {
         'start_failed': 'Start failed',
         'stop_requested': 'Stopped',
         'activity_unavailable': 'Activity/Starter unavailable',
+        'projection_cancelled': 'Screen sharing was cancelled',
+        'projection_allowed': 'Screen sharing was allowed',
+        'projection_no_result': 'Could not obtain the screen sharing result',
         'start_consent_title': 'Screen sharing and audio processing confirmation',
         'start_consent_body': (
             'Before starting, please choose “entire screen” in the Android screen sharing confirmation.\n\n'
             'DSRE-Equalizer captures playback audio on this device and processes it locally using Wet Delta / Air Assist.\n\n'
             'The captured audio data is not designed to be sent to external servers. Audio processing is performed on-device, and settings are saved in the app-specific storage area.\n\n'
+            'While processing is active, DSRE-Equalizer shows a notification with the active state and key parameters.\n\n'
             'If you understand this, tap OK to continue to the Android screen sharing permission screen.'
         ),
         'ok': 'OK',
@@ -166,6 +335,7 @@ I18N = {
         'param_assistGain': 'Assist Gain',
         'param_airMix': 'Air Mix',
         'param_airHpAlpha': 'Air HP Alpha',
+        'param_quality': 'Quality',
     },
 }
 
@@ -205,6 +375,29 @@ def tr(lang, key):
 
 def is_android_runtime():
     return sys.platform == 'android'
+
+
+def get_safe_top_padding_dp():
+    # Android端末ではステータスバー領域にUIが入り込む場合があるため、
+    # status_bar_height を取得できる場合は、その分だけ上余白を増やす。
+    # 取得できない端末では、控えめな固定値で安全側に倒す。
+    if not is_android_runtime():
+        return 8
+    try:
+        from jnius import autoclass
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+        activity = PythonActivity.mActivity
+        if activity is not None:
+            resources = activity.getResources()
+            resource_id = resources.getIdentifier('status_bar_height', 'dimen', 'android')
+            if resource_id > 0:
+                px = resources.getDimensionPixelSize(resource_id)
+                density = resources.getDisplayMetrics().density
+                if density and density > 0:
+                    return max(22, int(px / density) + 7.2)
+    except Exception:
+        pass
+    return 26
 
 
 def clamp(v, lo, hi):
@@ -270,16 +463,25 @@ class MaterialButton(Button):
         self.color = MATERIAL['text']
         self.bold = True
         self.size_hint_y = None
-        self.height = kw.get('height', dp(42))
+        self.height = kw.get('height', dp(40))
         self.font_size = kw.get('font_size', '13sp')
+        self.kind = None
+        self.set_kind(kind)
+        if APP_FONT_NAME:
+            self.font_name = APP_FONT_NAME
+
+    def set_kind(self, kind):
+        self.kind = kind
         self.background_color = {
             'danger': MATERIAL['danger'],
             'secondary': MATERIAL['secondary'],
             'flat': MATERIAL['surface_alt'],
             'black': MATERIAL['black'],
         }.get(kind, MATERIAL['primary'])
-        if APP_FONT_NAME:
-            self.font_name = APP_FONT_NAME
+        try:
+            self.canvas.ask_update()
+        except Exception:
+            pass
 
 
 class MaterialInput(TextInput):
@@ -318,7 +520,7 @@ class SectionTitle(MaterialLabel):
         kw.setdefault('font_size', '15sp')
         kw.setdefault('bold', True)
         kw.setdefault('size_hint_y', None)
-        kw.setdefault('height', dp(26))
+        kw.setdefault('height', dp(24))
         super().__init__(**kw)
 
 
@@ -327,13 +529,13 @@ class SmallLabel(MaterialLabel):
         kw.setdefault('color', MATERIAL['muted'])
         kw.setdefault('font_size', '11sp')
         kw.setdefault('size_hint_y', None)
-        kw.setdefault('height', dp(22))
+        kw.setdefault('height', dp(20))
         super().__init__(**kw)
 
 
 class ParamControl(BoxLayout):
     def __init__(self, key, label, default_value, minimum, maximum, step, decimals=2, integer=False, **kw):
-        super().__init__(orientation='vertical', size_hint_y=None, height=dp(92), spacing=dp(4), **kw)
+        super().__init__(orientation='vertical', size_hint_y=None, height=dp(90), spacing=dp(3), **kw)
         self.key = key
         self.minimum = float(minimum)
         self.maximum = float(maximum)
@@ -344,7 +546,7 @@ class ParamControl(BoxLayout):
         self.label = SmallLabel(text='')
         self.add_widget(self.label)
 
-        row = BoxLayout(size_hint_y=None, height=dp(38), spacing=dp(6))
+        row = BoxLayout(size_hint_y=None, height=dp(36), spacing=dp(6))
         self.minus_button = MaterialButton(text='-', kind='flat', width=dp(40), size_hint_x=None)
         self.input = MaterialInput(text=self.format_value(default_value))
         self.plus_button = MaterialButton(text='+', kind='flat', width=dp(40), size_hint_x=None)
@@ -425,15 +627,19 @@ class ParamControl(BoxLayout):
 
 class Root(BoxLayout):
     def __init__(self, **kw):
-        super().__init__(orientation='vertical', spacing=dp(10), padding=dp(10), **kw)
+        super().__init__(orientation='vertical', spacing=dp(9), padding=[dp(8), dp(get_safe_top_padding_dp()), dp(8), dp(7)], **kw)
         self.activity = None
         self.starter_cls = None
         self.engine_cls = None
+        self.service_cls = None
         self.capture_running = False
+        self.projection_request_pending = False
         self.start_button = None
         self.stop_button = None
         self.language = 'ja'
         self.lang_buttons = {}
+        self.active_preset_name = None
+        self.preset_buttons = {}
         with self.canvas.before:
             Color(*MATERIAL['bg'])
             self._bg = Rectangle(pos=self.pos, size=self.size)
@@ -448,9 +654,9 @@ class Root(BoxLayout):
         self._bg.size = self.size
 
     def _build_ui(self):
-        header = MaterialCard(orientation='horizontal', size_hint_y=None, height=dp(88), padding=dp(12))
+        header = MaterialCard(orientation='horizontal', size_hint_y=None, height=dp(78), padding=dp(15))
         title_box = BoxLayout(orientation='vertical')
-        self.title_label = MaterialLabel(text='', font_size='22sp', bold=True, size_hint_y=None, height=dp(34))
+        self.title_label = MaterialLabel(text='', font_size='20sp', bold=True, size_hint_y=None, height=dp(32))
         self.subtitle_label = SmallLabel(text='')
         title_box.add_widget(self.title_label)
         title_box.add_widget(self.subtitle_label)
@@ -460,10 +666,10 @@ class Root(BoxLayout):
         header.add_widget(self.info_button)
         self.add_widget(header)
 
-        status = MaterialCard(orientation='vertical', size_hint_y=None, height=dp(112))
+        status = MaterialCard(orientation='vertical', size_hint_y=None, height=dp(106))
         self.status_title = SectionTitle(text='')
         status.add_widget(self.status_title)
-        self.status = MaterialLabel(text='', size_hint_y=None, height=dp(36))
+        self.status = MaterialLabel(text='', size_hint_y=None, height=dp(30))
         self.meter = SmallLabel(text='mode=8 / assistGain=0.25 / saved to mini_dsre_config.json')
         status.add_widget(self.status)
         status.add_widget(self.meter)
@@ -475,14 +681,51 @@ class Root(BoxLayout):
         scroll.add_widget(content)
         self.add_widget(scroll)
 
-        panel = MaterialCard(orientation='vertical', size_hint_y=None)
+        panel = MaterialCard(orientation='vertical', size_hint_y=None, height=dp(16))
         panel.bind(minimum_height=panel.setter('height'))
         self.param_title = SectionTitle(text='')
-        self.mode_help_label = SmallLabel(text='')
+        self.mode_help_label = SmallLabel(text='', height=dp(38), font_size='10sp', valign='top')
+        self.mode_help_label.bind(size=lambda widget, size: setattr(widget, 'text_size', (size[0], size[1])))
         panel.add_widget(self.param_title)
         panel.add_widget(self.mode_help_label)
+        panel.add_widget(SectionTitle(text=tr(self.language, 'preset_section')))
+        preset_row = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(8))
+        self.preset_everyday_hifi_plus_button = MaterialButton(text=tr(self.language, 'preset_everyday_hifi_plus'), kind='flat')
+        self.preset_everyday_hifi_button = MaterialButton(text=tr(self.language, 'preset_everyday_hifi'), kind='flat')
+        self.preset_everyday_normal_button = MaterialButton(text=tr(self.language, 'preset_everyday_normal'), kind='flat')
+        self.preset_natural_air_button = MaterialButton(text=tr(self.language, 'preset_natural_air'), kind='flat')
+        self.preset_everyday_hifi_plus_button.bind(on_release=lambda *_: self.apply_preset('Everyday HiFi+'))
+        self.preset_everyday_hifi_button.bind(on_release=lambda *_: self.apply_preset('Everyday HiFi'))
+        self.preset_everyday_normal_button.bind(on_release=lambda *_: self.apply_preset('Everyday Normal'))
+        self.preset_natural_air_button.bind(on_release=lambda *_: self.apply_preset('Natural Air'))
+        preset_row.add_widget(self.preset_everyday_hifi_plus_button)
+        preset_row.add_widget(self.preset_everyday_hifi_button)
+        preset_row.add_widget(self.preset_everyday_normal_button)
+        preset_row.add_widget(self.preset_natural_air_button)
+        panel.add_widget(preset_row)
+        preset_row_2 = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(8))
+        self.preset_hifi_plus_smooth_button = MaterialButton(text=tr(self.language, 'preset_hifi_plus_smooth'), kind='flat')
+        self.preset_hifi_plus_clear_button = MaterialButton(text=tr(self.language, 'preset_hifi_plus_clear'), kind='flat')
+        self.preset_hifi_low_cpu_button = MaterialButton(text=tr(self.language, 'preset_hifi_low_cpu'), kind='flat')
+        self.preset_hifi_plus_smooth_button.bind(on_release=lambda _button, preset_name='HiFi+ Smooth': self.apply_preset(preset_name))
+        self.preset_hifi_plus_clear_button.bind(on_release=lambda _button, preset_name='HiFi+ Clear': self.apply_preset(preset_name))
+        self.preset_hifi_low_cpu_button.bind(on_release=lambda _button, preset_name='HiFi Low CPU': self.apply_preset(preset_name))
+        preset_row_2.add_widget(self.preset_hifi_plus_smooth_button)
+        preset_row_2.add_widget(self.preset_hifi_plus_clear_button)
+        preset_row_2.add_widget(self.preset_hifi_low_cpu_button)
+        panel.add_widget(preset_row_2)
+        self.preset_buttons = {
+            'Everyday HiFi+': self.preset_everyday_hifi_plus_button,
+            'Everyday HiFi': self.preset_everyday_hifi_button,
+            'Everyday Normal': self.preset_everyday_normal_button,
+            'Natural Air': self.preset_natural_air_button,
+            'HiFi+ Smooth': self.preset_hifi_plus_smooth_button,
+            'HiFi+ Clear': self.preset_hifi_plus_clear_button,
+            'HiFi Low CPU': self.preset_hifi_low_cpu_button,
+        }
+        self.update_preset_button_colors()
         self.inputs = {}
-        for key in ['mode', 'gain', 'threshold', 'ratio', 'makeup', 'satDrive', 'satMix', 'outputGain', 'assistGain', 'airMix', 'airHpAlpha']:
+        for key in ['mode', 'gain', 'threshold', 'ratio', 'makeup', 'satDrive', 'satMix', 'outputGain', 'assistGain', 'airMix', 'airHpAlpha', 'quality']:
             spec = PARAM_SPECS[key]
             w = ParamControl(
                 key=key,
@@ -496,7 +739,7 @@ class Root(BoxLayout):
             )
             panel.add_widget(w)
             self.inputs[key] = w
-        row = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
+        row = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(8))
         self.save_button = MaterialButton(text='', kind='secondary')
         self.apply_button = MaterialButton(text='', kind='primary')
         self.reset_button = MaterialButton(text='', kind='flat')
@@ -513,7 +756,7 @@ class Root(BoxLayout):
         control.bind(minimum_height=control.setter('height'))
         self.control_title = SectionTitle(text='')
         control.add_widget(self.control_title)
-        row1 = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
+        row1 = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(8))
         self.start_button = MaterialButton(text='', kind='primary')
         self.stop_button = MaterialButton(text='', kind='danger')
         self.start_button.bind(on_release=lambda *_: self.start_projection_flow())
@@ -534,6 +777,76 @@ class Root(BoxLayout):
             self.stop_button.disabled = not self.capture_running
             self.stop_button.opacity = 1.0 if self.capture_running else 0.45
 
+
+    def set_projection_pending(self, pending):
+        self.projection_request_pending = bool(pending)
+        if pending:
+            if self.start_button is not None:
+                self.start_button.disabled = True
+                self.start_button.opacity = 0.45
+            if self.stop_button is not None:
+                self.stop_button.disabled = True
+                self.stop_button.opacity = 0.45
+        else:
+            if not self.capture_running:
+                self.set_capture_running(False)
+
+    def on_activity_result(self, request_code, result_code, intent):
+        try:
+            request = int(request_code)
+        except Exception:
+            request = -1
+        if request != DSRE_MEDIA_PROJECTION_REQUEST_CODE:
+            return
+        if not self.projection_request_pending:
+            return
+        self.projection_request_pending = False
+        try:
+            code = int(result_code)
+        except Exception:
+            code = 0
+        # Android Activity.RESULT_OK is -1. Anything else is treated as cancelled/denied.
+        if code == -1:
+            self.set_capture_running(True)
+            self.log(tr(self.language, 'projection_allowed'))
+        else:
+            self.set_capture_running(False)
+            self.log(tr(self.language, 'projection_cancelled'))
+
+
+    def finish_projection_result(self, result_code, source='unknown'):
+        self.projection_request_pending = False
+        try:
+            code = int(result_code)
+        except Exception:
+            code = 0
+        # Android Activity.RESULT_OK is -1. Anything else means cancelled/denied.
+        if code == -1:
+            self.set_capture_running(True)
+            self.log(tr(self.language, 'projection_allowed'))
+        else:
+            self.set_capture_running(False)
+            self.log(tr(self.language, 'projection_cancelled'))
+
+    def poll_projection_result(self, attempt=0):
+        if not self.projection_request_pending:
+            return False
+        try:
+            if self.starter_cls is not None and bool(self.starter_cls.hasProjectionResult()):
+                code = int(self.starter_cls.getLastProjectionResultCode())
+                self.finish_projection_result(code, source='java-poll')
+                return False
+        except Exception:
+            pass
+        # Safety fallback: if Java result is not exposed, do not leave UI locked forever.
+        if attempt >= 80:
+            self.projection_request_pending = False
+            self.set_capture_running(False)
+            self.log(tr(self.language, 'projection_no_result'))
+            return False
+        Clock.schedule_once(lambda _dt: self.poll_projection_result(attempt + 1), 0.25)
+        return False
+
     def apply_language(self):
         self.title_label.text = tr(self.language, 'app_title')
         self.subtitle_label.text = tr(self.language, 'subtitle')
@@ -550,16 +863,95 @@ class Root(BoxLayout):
         self.stop_button.text = tr(self.language, 'stop')
         for key, control in self.inputs.items():
             control.set_label(tr(self.language, 'param_' + key))
+        if hasattr(self, 'preset_everyday_hifi_button'):
+            self.preset_everyday_hifi_plus_button.text = tr(self.language, 'preset_everyday_hifi_plus')
+            self.preset_everyday_hifi_button.text = tr(self.language, 'preset_everyday_hifi')
+            self.preset_everyday_normal_button.text = tr(self.language, 'preset_everyday_normal')
+            self.preset_natural_air_button.text = tr(self.language, 'preset_natural_air')
+            if hasattr(self, 'preset_hifi_plus_smooth_button'):
+                self.preset_hifi_plus_smooth_button.text = tr(self.language, 'preset_hifi_plus_smooth')
+                self.preset_hifi_plus_clear_button.text = tr(self.language, 'preset_hifi_plus_clear')
+                self.preset_hifi_low_cpu_button.text = tr(self.language, 'preset_hifi_low_cpu')
         for lang, button in self.lang_buttons.items():
             button.opacity = 1.0 if lang == self.language else 0.65
+        self.update_preset_button_colors()
+
+    def update_preset_button_colors(self, active_preset_name=None):
+        if active_preset_name is not None:
+            self.active_preset_name = normalize_preset_name(active_preset_name)
+        else:
+            self.active_preset_name = normalize_preset_name(self.active_preset_name)
+        for preset_name, button in self.preset_buttons.items():
+            is_active = preset_name == self.active_preset_name
+            button.set_kind('secondary' if is_active else 'flat')
+            button.opacity = 1.0 if is_active else 0.86
+            try:
+                button.state = 'normal'
+                button.canvas.ask_update()
+            except Exception:
+                pass
+
+    def find_matching_preset_name(self, params):
+        if not isinstance(params, dict):
+            return None
+        for preset_name, preset in PRESETS.items():
+            matched = True
+            for key, spec in PARAM_SPECS.items():
+                if key not in preset:
+                    continue
+                current_value = params.get(key, DEFAULT_PARAMS.get(key))
+                preset_value = preset.get(key)
+                try:
+                    if spec.get('integer'):
+                        if int(float(current_value)) != int(float(preset_value)):
+                            matched = False
+                            break
+                    else:
+                        if abs(float(current_value) - float(preset_value)) > 0.0005:
+                            matched = False
+                            break
+                except Exception:
+                    matched = False
+                    break
+            if matched:
+                return preset_name
+        return None
 
     def show_info_popup(self):
-        box = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(14))
-        body = MaterialLabel(text=tr(self.language, 'info_body'), font_size='13sp')
-        box.add_widget(body)
-        box.add_widget(SectionTitle(text=tr(self.language, 'language')))
+        # AboutポップアップはScrollViewを使わない。
+        # 以前、表示直後にスクロール位置が動いて本文が見えなくなる端末差があったため、
+        # 固定高さLabel + top揃えで安定表示にする。
+        box = BoxLayout(orientation='vertical', spacing=dp(8), padding=[dp(14), dp(8), dp(14), dp(14)])
 
-        lang_row = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
+        body = MaterialLabel(
+            text=tr(self.language, 'info_body'),
+            font_size='12sp',
+            size_hint_y=None,
+            height=dp(370),
+            valign='top',
+            halign='left',
+        )
+        body.bind(size=lambda widget, size: setattr(widget, 'text_size', (size[0], size[1])))
+        box.add_widget(body)
+
+        box.add_widget(SectionTitle(text=tr(self.language, 'privacy_policy_title'), height=dp(24)))
+        privacy_body = MaterialLabel(
+            text=tr(self.language, 'privacy_policy_body'),
+            font_size='11sp',
+            size_hint_y=None,
+            height=dp(78),
+            valign='top',
+            halign='left',
+        )
+        privacy_body.bind(size=lambda widget, size: setattr(widget, 'text_size', (size[0], size[1])))
+        box.add_widget(privacy_body)
+
+        privacy_url = MaterialInput(text=PRIVACY_POLICY_URL, readonly=True, font_size='11sp')
+        privacy_url.height = dp(40)
+        box.add_widget(privacy_url)
+
+        box.add_widget(SectionTitle(text=tr(self.language, 'language'), height=dp(24)))
+        lang_row = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(8))
         self.lang_buttons = {}
         ja_button = MaterialButton(text=tr(self.language, 'japanese'), kind='secondary')
         en_button = MaterialButton(text=tr(self.language, 'english'), kind='flat')
@@ -573,7 +965,7 @@ class Root(BoxLayout):
 
         close_button = MaterialButton(text=tr(self.language, 'close'), kind='primary')
         box.add_widget(close_button)
-        popup = Popup(title=tr(self.language, 'info_title'), content=box, size_hint=(0.90, 0.72), auto_dismiss=True)
+        popup = Popup(title=tr(self.language, 'info_title'), content=box, size_hint=(0.92, 0.82), auto_dismiss=True)
         if APP_FONT_NAME:
             popup.title_font = APP_FONT_NAME
         close_button.bind(on_release=popup.dismiss)
@@ -606,6 +998,12 @@ class Root(BoxLayout):
             self.activity = PythonActivity.mActivity
             self.starter_cls = autoclass('com.crossdarkrix.dsre_realtime.DSREProjectionServiceStarter')
             self.engine_cls = autoclass('com.crossdarkrix.dsre_realtime.DSREAudioCaptureEngine')
+            self.service_cls = autoclass('com.crossdarkrix.dsre_realtime.DSREPythonService')
+            try:
+                from android import activity as android_activity
+                android_activity.bind(on_activity_result=self.on_activity_result)
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -632,12 +1030,25 @@ class Root(BoxLayout):
             'assistGain': clamp(self.inputs['assistGain'].text, 0.0, 1.0),
             'airMix': clamp(self.inputs['airMix'].text, 0.0, 1.0),
             'airHpAlpha': clamp(self.inputs['airHpAlpha'].text, 0.005, 0.50),
+            'quality': clamp_int(self.inputs['quality'].text, 0, 2),
             'language': self.language,
+            'activePreset': normalize_preset_name(self.active_preset_name),
         }
+
+    def migrate_params_for_save(self, p):
+        migrated = dict(DEFAULT_PARAMS)
+        if isinstance(p, dict):
+            migrated.update(p)
+        migrated['mode'] = clamp_int(migrated.get('mode', DEFAULT_PARAMS['mode']), 6, 8)
+        migrated['quality'] = clamp_int(migrated.get('quality', DEFAULT_PARAMS.get('quality', 1)), 0, 2)
+        migrated['language'] = migrated.get('language', self.language)
+        active_preset = normalize_preset_name(migrated.get('activePreset'))
+        migrated['activePreset'] = active_preset
+        return migrated
 
     def set_ui_from_params(self, p):
         for k, v in DEFAULT_PARAMS.items():
-            if k == 'language':
+            if k in ('language', 'activePreset'):
                 continue
             if k in self.inputs:
                 self.inputs[k].text = str(p.get(k, v))
@@ -646,31 +1057,52 @@ class Root(BoxLayout):
             self.language = 'ja'
         self.apply_language()
         self.update_meter(p)
+        saved_active_preset = normalize_preset_name(p.get('activePreset'))
+        if saved_active_preset in PRESETS:
+            self.active_preset_name = saved_active_preset
+        else:
+            self.active_preset_name = self.find_matching_preset_name(p)
+        self.update_preset_button_colors()
 
     def update_meter(self, p):
-        self.meter.text = f"mode={int(p.get('mode', 8))} gain={float(p.get('gain', 0.30)):.2f} assist={float(p.get('assistGain', 0.25)):.2f} air={float(p.get('airMix', 0.80)):.2f} hp={float(p.get('airHpAlpha', 0.08)):.3f}"
+        self.meter.text = f"mode={int(p.get('mode', 8))} q={int(p.get('quality', 1))} gain={float(p.get('gain', 0.30)):.2f} assist={float(p.get('assistGain', 0.25)):.2f} air={float(p.get('airMix', 0.80)):.2f} hp={float(p.get('airHpAlpha', 0.08)):.3f}"
 
     def load_params_into_ui(self):
         p = dict(DEFAULT_PARAMS)
         path = self.get_config_path()
+        loaded_has_quality = False
+        loaded_has_active_preset = False
         try:
             if os.path.exists(path):
                 with open(path, 'r', encoding='utf-8') as f:
                     loaded = json.load(f)
                 if isinstance(loaded, dict):
+                    loaded_has_quality = 'quality' in loaded
+                    loaded_has_active_preset = 'activePreset' in loaded
                     p.update(loaded)
         except Exception:
             pass
+        p = self.migrate_params_for_save(p)
         self.set_ui_from_params(p)
+        # 古いconfigにquality / activePreset が無い場合は、その場で補完してサービス側にも見えるようにする。
+        if not loaded_has_quality or not loaded_has_active_preset:
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, 'w', encoding='utf-8') as f:
+                    json.dump(p, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
 
     def save_params_only(self, silent=False):
-        p = self.read_params_from_ui()
+        p = self.migrate_params_for_save(self.read_params_from_ui())
         path = self.get_config_path()
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, 'w', encoding='utf-8') as f:
                 json.dump(p, f, ensure_ascii=False, indent=2)
             self.update_meter(p)
+            self.active_preset_name = normalize_preset_name(p.get('activePreset'))
+            self.update_preset_button_colors()
             if not silent:
                 self.log(tr(self.language, 'saved'))
         except Exception:
@@ -682,30 +1114,61 @@ class Root(BoxLayout):
         if self.engine_cls is None:
             return
         try:
+            try:
+                self.engine_cls.configureQuality(int(p.get('quality', 1)))
+            except Exception:
+                pass
             self.engine_cls.configureMiniDsre(float(p['threshold']), float(p['ratio']), float(p['makeup']), float(p['satDrive']), float(p['satMix']), float(p['outputGain']))
             self.engine_cls.configureMiniDsreAssist(float(p['assistGain']), float(p['airMix']), float(p['airHpAlpha']))
+            try:
+                if self.service_cls is not None and self.activity is not None:
+                    self.service_cls.updateDsreForegroundNotification(self.activity)
+            except Exception:
+                pass
             self.log(tr(self.language, 'applied'))
         except Exception:
             pass
 
+    def apply_preset(self, preset_name):
+        preset_name = normalize_preset_name(preset_name)
+        preset = PRESETS.get(preset_name)
+        if not preset:
+            return
+        p = dict(DEFAULT_PARAMS)
+        p.update(preset)
+        p['language'] = self.language
+        p['activePreset'] = preset_name
+        self.set_ui_from_params(p)
+        self.active_preset_name = preset_name
+        self.update_preset_button_colors(preset_name)
+        self.save_params_only(silent=True)
+        self.active_preset_name = preset_name
+        self.update_preset_button_colors(preset_name)
+        Clock.schedule_once(lambda _dt: self.update_preset_button_colors(preset_name), 0)
+        self.apply_params_to_running_engine()
+        Clock.schedule_once(lambda _dt: self.update_preset_button_colors(preset_name), 0)
+
     def reset_params(self):
         p = dict(DEFAULT_PARAMS)
         p['language'] = self.language
+        p['activePreset'] = None
         self.set_ui_from_params(p)
+        self.active_preset_name = None
+        self.update_preset_button_colors()
         self.save_params_only(silent=True)
         self.log(tr(self.language, 'reset_done'))
 
     def show_start_consent_popup(self):
-        box = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(14))
+        box = BoxLayout(orientation='vertical', spacing=dp(8), padding=[dp(14), dp(6), dp(14), dp(14)])
         body = MaterialLabel(
             text=tr(self.language, 'start_consent_body'),
             font_size='13sp',
             size_hint_y=None,
-            height=dp(260),
+            height=dp(430),
             valign='top',
+            halign='left',
         )
-        body.text_size = (0, None)
-        body.bind(width=lambda widget, width: setattr(widget, 'text_size', (width, None)))
+        body.bind(size=lambda widget, size: setattr(widget, 'text_size', (size[0], size[1])))
         box.add_widget(body)
 
         button_row = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(8))
@@ -715,7 +1178,7 @@ class Root(BoxLayout):
         button_row.add_widget(ok_button)
         box.add_widget(button_row)
 
-        popup = Popup(title=tr(self.language, 'start_consent_title'), content=box, size_hint=(0.92, 0.62), auto_dismiss=False)
+        popup = Popup(title=tr(self.language, 'start_consent_title'), content=box, size_hint=(0.92, 0.66), auto_dismiss=False)
         if APP_FONT_NAME:
             popup.title_font = APP_FONT_NAME
         cancel_button.bind(on_release=popup.dismiss)
@@ -730,24 +1193,30 @@ class Root(BoxLayout):
         self.start_projection_after_consent()
 
     def start_projection_after_consent(self):
-        if self.capture_running:
+        if self.capture_running or self.projection_request_pending:
             self.log(tr(self.language, 'start_ignored'))
             return
         if not is_android_runtime() or self.activity is None or self.starter_cls is None:
             self.log(tr(self.language, 'activity_unavailable'))
             return
         try:
-            self.set_capture_running(True)
+            self.set_projection_pending(True)
+            try:
+                self.starter_cls.resetProjectionResult()
+            except Exception:
+                pass
             self.save_params_only(silent=True)
             self.apply_params_to_running_engine()
             self.log(tr(self.language, 'requesting'))
             self.starter_cls.requestProjection(self.activity)
+            self.poll_projection_result(0)
         except Exception as exc:
+            self.set_projection_pending(False)
             self.set_capture_running(False)
             self.log(f"{tr(self.language, 'start_failed')}: {exc}")
 
     def start_projection_flow(self):
-        if self.capture_running:
+        if self.capture_running or self.projection_request_pending:
             self.log(tr(self.language, 'start_ignored'))
             return
         if not is_android_runtime() or self.activity is None or self.starter_cls is None:
@@ -764,6 +1233,7 @@ class Root(BoxLayout):
         except Exception:
             pass
         finally:
+            self.projection_request_pending = False
             self.set_capture_running(False)
             self.log(tr(self.language, 'stop_requested'))
 
