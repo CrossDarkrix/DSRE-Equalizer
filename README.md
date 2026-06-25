@@ -7,7 +7,7 @@
 
 # DSRE-Equalizer
 
-**DSRE-Equalizer(Deep Sound Resolution Enhancer Equalizer)** は、Android上で再生中の音声を取得し、リアルタイムに軽量な音響補助処理を行う実験的なアプリです。
+**DSRE-Equalizer(Deep Sound Resolution Enhance Equalizer)** は、Android上で再生中の音声を取得し、リアルタイムに軽量な音響補助処理を行う実験的なアプリです。
 
 現在の安定版では、元の再生音に対して **Wet Delta / Air Assist** 方式の補助音を薄く重ねる設計になっています。
 
