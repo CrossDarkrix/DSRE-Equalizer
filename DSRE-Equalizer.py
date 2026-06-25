@@ -258,15 +258,15 @@ I18N = {
         'param_mode': 'モード',
         'param_gain': '入力ゲイン',
         'param_threshold': 'しきい値',
-        'param_ratio': '比率',
-        'param_makeup': 'メイクアップ',
-        'param_satDrive': 'サチュレーション Drive',
-        'param_satMix': 'サチュレーション Mix',
+        'param_ratio': '比率度合い',
+        'param_makeup': '彩り度合い',
+        'param_satDrive': '飽和感の駆動度合い',
+        'param_satMix': '飽和感の混合度合い',
         'param_outputGain': '出力ゲイン',
         'param_assistGain': '補助ゲイン',
-        'param_airMix': 'Air Mix',
-        'param_airHpAlpha': 'Air HP Alpha',
-'param_quality': '品質',
+        'param_airMix': '空気感の混合度合い',
+        'param_airHpAlpha': '空気感の透明度度合い',
+        'param_quality': '音質',
     },
     'en': {
         'app_title': 'DSRE-Equalizer',
@@ -378,9 +378,6 @@ def is_android_runtime():
 
 
 def get_safe_top_padding_dp():
-    # Android端末ではステータスバー領域にUIが入り込む場合があるため、
-    # status_bar_height を取得できる場合は、その分だけ上余白を増やす。
-    # 取得できない端末では、控えめな固定値で安全側に倒す。
     if not is_android_runtime():
         return 8
     try:
@@ -805,7 +802,6 @@ class Root(BoxLayout):
             code = int(result_code)
         except Exception:
             code = 0
-        # Android Activity.RESULT_OK is -1. Anything else is treated as cancelled/denied.
         if code == -1:
             self.set_capture_running(True)
             self.log(tr(self.language, 'projection_allowed'))
@@ -820,7 +816,6 @@ class Root(BoxLayout):
             code = int(result_code)
         except Exception:
             code = 0
-        # Android Activity.RESULT_OK is -1. Anything else means cancelled/denied.
         if code == -1:
             self.set_capture_running(True)
             self.log(tr(self.language, 'projection_allowed'))
@@ -838,7 +833,6 @@ class Root(BoxLayout):
                 return False
         except Exception:
             pass
-        # Safety fallback: if Java result is not exposed, do not leave UI locked forever.
         if attempt >= 80:
             self.projection_request_pending = False
             self.set_capture_running(False)
@@ -918,9 +912,6 @@ class Root(BoxLayout):
         return None
 
     def show_info_popup(self):
-        # AboutポップアップはScrollViewを使わない。
-        # 以前、表示直後にスクロール位置が動いて本文が見えなくなる端末差があったため、
-        # 固定高さLabel + top揃えで安定表示にする。
         box = BoxLayout(orientation='vertical', spacing=dp(8), padding=[dp(14), dp(8), dp(14), dp(14)])
 
         body = MaterialLabel(
@@ -1084,7 +1075,6 @@ class Root(BoxLayout):
             pass
         p = self.migrate_params_for_save(p)
         self.set_ui_from_params(p)
-        # 古いconfigにquality / activePreset が無い場合は、その場で補完してサービス側にも見えるようにする。
         if not loaded_has_quality or not loaded_has_active_preset:
             try:
                 os.makedirs(os.path.dirname(path), exist_ok=True)
