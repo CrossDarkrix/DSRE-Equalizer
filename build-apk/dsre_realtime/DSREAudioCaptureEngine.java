@@ -45,7 +45,11 @@ public final class DSREAudioCaptureEngine {
     public static final int PROCESS_MINI_DSRE = 6;
     public static final int PROCESS_MINI_DSRE_WET_DELTA = 7;
     public static final int PROCESS_MINI_DSRE_AIR_ASSIST = 8;
+    public static final int QUALITY_NORMAL = 0;
+    public static final int QUALITY_HIFI = 1;
+    public static final int QUALITY_HIFI_PLUS = 2;
     private static volatile int processMode = PROCESS_GAIN_ONLY;
+    private static volatile int qualityMode = QUALITY_NORMAL;
     private static volatile long sessionId = 0L;
     private static volatile long writeZeroCount = 0L;
     private static volatile long shortWriteCount = 0L;
@@ -65,8 +69,24 @@ public final class DSREAudioCaptureEngine {
     private static volatile float miniAirHpAlpha = 0.08f;
     private static volatile float miniAirLp0 = 0.0f;
     private static volatile float miniAirLp1 = 0.0f;
+    private static volatile float miniAirLp2_0 = 0.0f;
+    private static volatile float miniAirLp2_1 = 0.0f;
+    private static volatile float miniAirLp3_0 = 0.0f;
+    private static volatile float miniAirLp3_1 = 0.0f;
     private static volatile float lastWetRms = 0.0f;
     private static volatile float lastAssistRms = 0.0f;
+    private static final int PROCESS_METRIC_RECENT_WINDOW = 64;
+    private static final float PROCESS_METRIC_SPIKE_THRESHOLD_MS = 20.0f;
+    private static final float[] recentProcessMsBuffer = new float[PROCESS_METRIC_RECENT_WINDOW];
+    private static volatile float lastProcessMs = 0.0f;
+    private static volatile float maxProcessMs = 0.0f;
+    private static volatile long processCalls = 0L;
+    private static volatile float avgProcessMs = 0.0f;
+    private static volatile float recentMaxProcessMs = 0.0f;
+    private static volatile long spikeCount = 0L;
+    private static volatile int recentSpikeCount = 0;
+    private static volatile int recentProcessIndex = 0;
+    private static volatile int recentProcessCount = 0;
     private static Thread workerThread = null;
     private static AudioRecord audioRecord = null;
     private static AudioTrack audioTrack = null;
@@ -85,6 +105,7 @@ public final class DSREAudioCaptureEngine {
     public static float getLastOutRms() { return lastOutRms; }
     public static float getGain() { return gain; }
     public static int getProcessMode() { return processMode; }
+    public static int getQualityMode() { return qualityMode; }
     public static long getSessionId() { return sessionId; }
     public static long getWriteZeroCount() { return writeZeroCount; }
     public static long getShortWriteCount() { return shortWriteCount; }
@@ -104,14 +125,43 @@ public final class DSREAudioCaptureEngine {
     public static float getMiniAirHpAlpha() { return miniAirHpAlpha; }
     public static float getLastWetRms() { return lastWetRms; }
     public static float getLastAssistRms() { return lastAssistRms; }
+    public static float getLastProcessMs() { return lastProcessMs; }
+    public static float getMaxProcessMs() { return maxProcessMs; }
+    public static long getProcessCalls() { return processCalls; }
+    public static float getAvgProcessMs() { return avgProcessMs; }
+    public static float getRecentMaxProcessMs() { return recentMaxProcessMs; }
+    public static long getSpikeCount() { return spikeCount; }
+    public static int getRecentSpikeCount() { return recentSpikeCount; }
+    public static float getProcessSpikeThresholdMs() { return PROCESS_METRIC_SPIKE_THRESHOLD_MS; }
+    public static void configureQuality(int quality) {
+        if (quality <= QUALITY_NORMAL) {
+            qualityMode = QUALITY_NORMAL;
+        } else if (quality == QUALITY_HIFI) {
+            qualityMode = QUALITY_HIFI;
+        } else {
+            qualityMode = QUALITY_HIFI_PLUS;
+        }
+        resetMiniAirState();
+        writeLog(null, "configureQuality qualityMode=" + qualityMode);
+    }
+
+    private static void resetMiniAirState() {
+        miniAirLp0 = 0.0f;
+        miniAirLp1 = 0.0f;
+        miniAirLp2_0 = 0.0f;
+        miniAirLp2_1 = 0.0f;
+        miniAirLp3_0 = 0.0f;
+        miniAirLp3_1 = 0.0f;
+    }
+
     public static void configureMiniDsreAssist(float assistGain, float airMix, float airHpAlpha) {
         miniAssistGain = clamp(assistGain, 0.0f, 1.0f);
         miniAirMix = clamp(airMix, 0.0f, 1.0f);
         miniAirHpAlpha = clamp(airHpAlpha, 0.005f, 0.50f);
-        miniAirLp0 = 0.0f;
-        miniAirLp1 = 0.0f;
+        resetMiniAirState();
         writeLog(null, "configureMiniDsreAssist assistGain=" + miniAssistGain + " airMix=" + miniAirMix + " airHpAlpha=" + miniAirHpAlpha);
     }
+
     public static void configureMiniDsre(float threshold, float ratio, float makeup, float satDrive, float satMix, float outputGain) {
         miniThreshold = clamp(threshold, 0.02f, 0.60f);
         miniRatio = clamp(ratio, 1.0f, 8.0f);
@@ -157,6 +207,11 @@ public final class DSREAudioCaptureEngine {
             lastWrite = 0;
             lastRms = 0.0f;
             lastOutRms = 0.0f;
+            lastProcessMs = 0.0f;
+            maxProcessMs = 0.0f;
+            processCalls = 0L;
+            resetProcessMetrics();
+            resetMiniAirState();
             stage = "start stable passthrough requested";
         }
         workerThread = new Thread(new Runnable() {
@@ -188,7 +243,7 @@ public final class DSREAudioCaptureEngine {
                 mediaProjection = null;
             }
         } catch (Throwable ignored) {}
-        writeLog(null, "stopCapture done session=" + sessionId + " frames=" + framesRead + " readCalls=" + readCalls + " writeCalls=" + writeCalls + " zeroWrites=" + writeZeroCount + " shortWrites=" + shortWriteCount + " errors=" + errorCount + " processorPeak=" + lastProcessorPeak + " gainReduction=" + lastGainReduction + " compressorActive=" + lastCompressorActiveSamples + " miniThreshold=" + miniThreshold + " miniRatio=" + miniRatio + " miniMakeup=" + miniMakeup + " satDrive=" + miniSaturationDrive + " satMix=" + miniSaturationMix + " miniOutputGain=" + miniOutputGain);
+        writeLog(null, "stopCapture done session=" + sessionId + " frames=" + framesRead + " readCalls=" + readCalls + " writeCalls=" + writeCalls + " zeroWrites=" + writeZeroCount + " shortWrites=" + shortWriteCount + " errors=" + errorCount + " processorPeak=" + lastProcessorPeak + " gainReduction=" + lastGainReduction + " compressorActive=" + lastCompressorActiveSamples + " miniThreshold=" + miniThreshold + " miniRatio=" + miniRatio + " miniMakeup=" + miniMakeup + " satDrive=" + miniSaturationDrive + " satMix=" + miniSaturationMix + " miniOutputGain=" + miniOutputGain + " quality=" + qualityMode);
     }
 
     private static void runPassthrough(int sampleRate, int requestedChannels) {
@@ -199,7 +254,7 @@ public final class DSREAudioCaptureEngine {
             stage = "get context";
             ctx = PythonService.mService;
             if (ctx == null) throw new IllegalStateException("PythonService.mService is null");
-            writeLog(ctx, "runPassthrough entered session=" + sessionId + " sampleRate=" + sampleRate + " requestedChannels=" + requestedChannels + " gain=" + gain + " mode=" + processMode);
+            writeLog(ctx, "runPassthrough entered session=" + sessionId + " sampleRate=" + sampleRate + " requestedChannels=" + requestedChannels + " gain=" + gain + " mode=" + processMode + " quality=" + qualityMode);
             stage = "get projection data";
             Intent resultData = DSREPythonService.getProjectionResultData();
             int resultCode = DSREPythonService.getProjectionResultCode();
@@ -270,7 +325,7 @@ public final class DSREAudioCaptureEngine {
                                 + " lastWrite=" + lastWrite
                                 + " rms=" + lastRms
                                 + " outRms=" + lastOutRms
-                                + " gain=" + gain + " mode=" + processMode + " session=" + sessionId + " zeroWrites=" + writeZeroCount + " shortWrites=" + shortWriteCount + " errors=" + errorCount + " processorPeak=" + lastProcessorPeak + " gainReduction=" + lastGainReduction + " compressorActive=" + lastCompressorActiveSamples + " miniThreshold=" + miniThreshold + " miniRatio=" + miniRatio + " miniMakeup=" + miniMakeup + " satDrive=" + miniSaturationDrive + " satMix=" + miniSaturationMix + " miniOutputGain=" + miniOutputGain);
+                                + " gain=" + gain + " mode=" + processMode + " quality=" + qualityMode + " session=" + sessionId + " zeroWrites=" + writeZeroCount + " shortWrites=" + shortWriteCount + " errors=" + errorCount + " processorPeak=" + lastProcessorPeak + " gainReduction=" + lastGainReduction + " compressorActive=" + lastCompressorActiveSamples + " miniThreshold=" + miniThreshold + " miniRatio=" + miniRatio + " miniMakeup=" + miniMakeup + " satDrive=" + miniSaturationDrive + " satMix=" + miniSaturationMix + " miniOutputGain=" + miniOutputGain + " quality=" + qualityMode);
                     }
                 } else if (read < 0) {
                     throw new IllegalStateException("AudioRecord.read failed: " + read);
@@ -333,7 +388,7 @@ public final class DSREAudioCaptureEngine {
                 .setBufferSizeInBytes(bufferBytes)
                 .build();
         if (audioTrack.getState() != AudioTrack.STATE_INITIALIZED) throw new IllegalStateException("AudioTrack not initialized ch=" + channels);
-        writeLog(null, "AudioRecord/AudioTrack initialized ch=" + channels + " minRec=" + minRec + " minOut=" + minOut + " bufferBytes=" + bufferBytes + " gain=" + gain + " mode=" + processMode + " session=" + sessionId + " zeroWrites=" + writeZeroCount + " shortWrites=" + shortWriteCount + " errors=" + errorCount + " processorPeak=" + lastProcessorPeak + " gainReduction=" + lastGainReduction + " compressorActive=" + lastCompressorActiveSamples + " miniThreshold=" + miniThreshold + " miniRatio=" + miniRatio + " miniMakeup=" + miniMakeup + " satDrive=" + miniSaturationDrive + " satMix=" + miniSaturationMix + " miniOutputGain=" + miniOutputGain);
+        writeLog(null, "AudioRecord/AudioTrack initialized ch=" + channels + " minRec=" + minRec + " minOut=" + minOut + " bufferBytes=" + bufferBytes + " gain=" + gain + " mode=" + processMode + " quality=" + qualityMode + " session=" + sessionId + " zeroWrites=" + writeZeroCount + " shortWrites=" + shortWriteCount + " errors=" + errorCount + " processorPeak=" + lastProcessorPeak + " gainReduction=" + lastGainReduction + " compressorActive=" + lastCompressorActiveSamples + " miniThreshold=" + miniThreshold + " miniRatio=" + miniRatio + " miniMakeup=" + miniMakeup + " satDrive=" + miniSaturationDrive + " satMix=" + miniSaturationMix + " miniOutputGain=" + miniOutputGain + " quality=" + qualityMode);
     }
 
     private static void closeAudioOnly() {
@@ -369,6 +424,7 @@ public final class DSREAudioCaptureEngine {
     }
 
     private static void processBuffer(short[] input, short[] output, int samples, float g, int mode) {
+        long processStartedNs = System.nanoTime();
         float peak = 0.0f;
         float totalReduction = 0.0f;
         float wetSquare = 0.0f;
@@ -384,9 +440,10 @@ public final class DSREAudioCaptureEngine {
             else if (mode == PROCESS_HARMONIC_SATURATION) { out = harmonicSaturation(dry); processed = out; }
             else if (mode == PROCESS_COMPRESSOR_PLUS_SATURATION) { processed = simpleCompressor(dry); processed = harmonicSaturation(processed); out = processed; }
             else if (mode == PROCESS_COMPRESSOR_DIAGNOSTIC) { out = compressorDiagnostic(dry); processed = out; }
-            else if (mode == PROCESS_MINI_DSRE) { processed = miniDsreCore(dry); out = processed * miniOutputGain; }
-            else if (mode == PROCESS_MINI_DSRE_WET_DELTA) { processed = miniDsreCore(dry); float wet = processed - dry; out = wet * miniAssistGain; wetSquare += wet * wet; assistSquare += out * out; }
-            else if (mode == PROCESS_MINI_DSRE_AIR_ASSIST) { processed = miniDsreCore(dry); float wet = processed - dry; float air = airAssistHighPass(wet, i); float assist = wet * (1.0f - miniAirMix) + air * miniAirMix; out = assist * miniAssistGain; wetSquare += wet * wet; assistSquare += out * out; }
+            else if (mode == PROCESS_MINI_DSRE) { processed = miniDsreCoreForQuality(dry); out = processed * miniOutputGain; }
+            else if (mode == PROCESS_MINI_DSRE_WET_DELTA) { processed = miniDsreCoreForQuality(dry); float wet = processed - dry; out = wet * miniAssistGain; wetSquare += wet * wet; assistSquare += out * out; }
+            else if (mode == PROCESS_MINI_DSRE_AIR_ASSIST) { processed = miniDsreCoreForQuality(dry); float wet = processed - dry; float air = airAssistHighPassForQuality(wet, i); float assist = wet * (1.0f - miniAirMix) + air * miniAirMix; out = assist * miniAssistGain; wetSquare += wet * wet; assistSquare += out * out; }
+            if (qualityMode >= QUALITY_HIFI) out = softLimitHifi(out);
             if (out > 1.0f) out = 1.0f;
             if (out < -1.0f) out = -1.0f;
             float beforeAbs = Math.abs(dry);
@@ -404,6 +461,138 @@ public final class DSREAudioCaptureEngine {
         lastCompressorActiveSamples = activeSamples;
         lastWetRms = samples > 0 ? (float)Math.sqrt(wetSquare / samples) : 0.0f;
         lastAssistRms = samples > 0 ? (float)Math.sqrt(assistSquare / samples) : 0.0f;
+        long processEndedNs = System.nanoTime();
+        float processMs = (float)((processEndedNs - processStartedNs) / 1000000.0);
+        updateProcessMetrics(processMs);
+    }
+
+    private static void resetProcessMetrics() {
+        avgProcessMs = 0.0f;
+        recentMaxProcessMs = 0.0f;
+        spikeCount = 0L;
+        recentSpikeCount = 0;
+        recentProcessIndex = 0;
+        recentProcessCount = 0;
+        for (int i = 0; i < PROCESS_METRIC_RECENT_WINDOW; i++) recentProcessMsBuffer[i] = 0.0f;
+    }
+
+    private static void updateProcessMetrics(float processMs) {
+        if (Float.isNaN(processMs) || Float.isInfinite(processMs) || processMs < 0.0f) processMs = 0.0f;
+        lastProcessMs = processMs;
+        processCalls += 1L;
+        if (processMs > maxProcessMs) maxProcessMs = processMs;
+        if (processMs >= PROCESS_METRIC_SPIKE_THRESHOLD_MS) spikeCount += 1L;
+
+        recentProcessMsBuffer[recentProcessIndex] = processMs;
+        recentProcessIndex += 1;
+        if (recentProcessIndex >= PROCESS_METRIC_RECENT_WINDOW) recentProcessIndex = 0;
+        if (recentProcessCount < PROCESS_METRIC_RECENT_WINDOW) recentProcessCount += 1;
+
+        float sum = 0.0f;
+        float rmax = 0.0f;
+        int rspikes = 0;
+        for (int i = 0; i < recentProcessCount; i++) {
+            float v = recentProcessMsBuffer[i];
+            sum += v;
+            if (v > rmax) rmax = v;
+            if (v >= PROCESS_METRIC_SPIKE_THRESHOLD_MS) rspikes += 1;
+        }
+        avgProcessMs = recentProcessCount > 0 ? sum / recentProcessCount : processMs;
+        recentMaxProcessMs = rmax;
+        recentSpikeCount = rspikes;
+    }
+
+    private static float miniDsreCoreForQuality(float x) {
+        if (qualityMode < QUALITY_HIFI) return miniDsreCore(x);
+        if (qualityMode >= QUALITY_HIFI_PLUS) return miniDsreCoreForQualityPlus(x);
+        float y = compressorCore(x, miniThreshold, miniRatio, miniMakeup);
+        y = harmonicSaturationParamHifi(y, miniSaturationDrive, miniSaturationMix);
+        if (y > 1.0f) y = 1.0f;
+        if (y < -1.0f) y = -1.0f;
+        return y;
+    }
+
+    private static float miniDsreCoreForQualityPlus(float x) {
+        float y = compressorCore(x, miniThreshold, miniRatio, miniMakeup);
+        y = harmonicSaturationParamHifiPlus(y, miniSaturationDrive, miniSaturationMix);
+        if (y > 1.0f) y = 1.0f;
+        if (y < -1.0f) y = -1.0f;
+        return y;
+    }
+
+    private static float harmonicSaturationParamHifi(float x, float drive, float mix) {
+        float safeDrive = Math.max(0.1f, drive);
+        float safeMix = Math.max(0.0f, Math.min(1.0f, mix));
+        float stageA = harmonicSaturationParam(x, safeDrive, safeMix);
+        float mid = (x + stageA) * 0.5f;
+        float stageB = harmonicSaturationParam(mid, safeDrive * 0.82f, safeMix * 0.70f);
+        float y = x * 0.18f + stageA * 0.58f + stageB * 0.24f;
+        if (y > 1.0f) y = 1.0f;
+        if (y < -1.0f) y = -1.0f;
+        return y;
+    }
+
+    private static float harmonicSaturationParamHifiPlus(float x, float drive, float mix) {
+        float safeDrive = Math.max(0.1f, drive);
+        float safeMix = Math.max(0.0f, Math.min(1.0f, mix));
+        float stageA = harmonicSaturationParam(x, safeDrive, safeMix);
+        float midAB = (x + stageA) * 0.5f;
+        float stageB = harmonicSaturationParam(midAB, safeDrive * 0.84f, safeMix * 0.68f);
+        float midBC = (stageA + stageB) * 0.5f;
+        float stageC = harmonicSaturationParam(midBC, safeDrive * 0.62f, safeMix * 0.44f);
+        float y = x * 0.10f + stageA * 0.46f + stageB * 0.30f + stageC * 0.14f;
+        if (y > 1.0f) y = 1.0f;
+        if (y < -1.0f) y = -1.0f;
+        return y;
+    }
+
+    private static float airAssistHighPassForQuality(float wet, int index) {
+        float hp1 = airAssistHighPass(wet, index);
+        if (qualityMode < QUALITY_HIFI) return hp1;
+
+        float alpha2 = miniAirHpAlpha * 0.40f;
+        if (alpha2 < 0.003f) alpha2 = 0.003f;
+        if (alpha2 > 0.23f) alpha2 = 0.23f;
+
+        float hp2;
+        if ((index & 1) == 0) {
+            miniAirLp2_0 = miniAirLp2_0 + alpha2 * (hp1 - miniAirLp2_0);
+            hp2 = hp1 - miniAirLp2_0;
+        } else {
+            miniAirLp2_1 = miniAirLp2_1 + alpha2 * (hp1 - miniAirLp2_1);
+            hp2 = hp1 - miniAirLp2_1;
+        }
+        if (qualityMode < QUALITY_HIFI_PLUS) return hp2;
+
+        float alpha3 = miniAirHpAlpha * 0.16f;
+        if (alpha3 < 0.002f) alpha3 = 0.002f;
+        if (alpha3 > 0.10f) alpha3 = 0.10f;
+
+        float hp3;
+        if ((index & 1) == 0) {
+            miniAirLp3_0 = miniAirLp3_0 + alpha3 * (hp2 - miniAirLp3_0);
+            hp3 = hp2 - miniAirLp3_0;
+        } else {
+            miniAirLp3_1 = miniAirLp3_1 + alpha3 * (hp2 - miniAirLp3_1);
+            hp3 = hp2 - miniAirLp3_1;
+        }
+        // HiFi+は3段目だけに寄せ過ぎると細くなりやすいため、2段目を少し戻して密度を残す。
+        return hp2 * 0.24f + hp3 * 0.76f;
+    }
+
+    private static float softLimitHifi(float x) {
+        if (qualityMode >= QUALITY_HIFI_PLUS) return softLimitHifiPlus(x);
+        if (x > 1.20f) x = 1.20f;
+        if (x < -1.20f) x = -1.20f;
+        return (float)Math.tanh(x * 1.08f) / (float)Math.tanh(1.08f);
+    }
+
+    private static float softLimitHifiPlus(float x) {
+        if (x > 1.28f) x = 1.28f;
+        if (x < -1.28f) x = -1.28f;
+        float a = (float)Math.tanh(x * 1.14f) / (float)Math.tanh(1.14f);
+        float b = (float)Math.tanh(a * 1.04f) / (float)Math.tanh(1.04f);
+        return a * 0.72f + b * 0.28f;
     }
 
     private static float miniDsreCore(float x) {
@@ -451,10 +640,6 @@ public final class DSREAudioCaptureEngine {
                 if (dir == null) dir = realCtx.getFilesDir();
             }
             if (dir == null) return;
-            if (!dir.exists()) dir.mkdirs();
-            File file = new File(dir, LOG_FILE_NAME);
-            FileWriter fw = new FileWriter(file, true);
-            String ts = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(new Date());
         } catch (Throwable ignored) {}
     }
 }
