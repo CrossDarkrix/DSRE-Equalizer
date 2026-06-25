@@ -11,8 +11,11 @@ LOG_FILE_NAME = "dsre_audio_capture_service.log"
 FILE_LOG_ENABLED = False
 CONFIG_FILE_NAME = "mini_dsre_config.json"
 SESSION_ID = f"{os.getpid()}-{int(time.time())}"
-VERSION = "v0.9.2-clean-ui"
+VERSION = "v1.0.7-notification-visible-lines"
 DEFAULT_GAIN = 0.30
+DEFAULT_QUALITY = 1
+NOTIFICATION_ID = 1
+NOTIFICATION_CHANNEL_ID = "dsre_runtime_status"
 # 0=GAIN_ONLY, 1=SOFT_CLIP, 2=COMPRESSOR, 3=SATURATION, 4=COMPRESSOR+SATURATION, 5=COMPRESSOR_DIAGNOSTIC, 6=MINI_DSRE
 PROCESS_MODE = 8
 MINI_THRESHOLD = 0.14
@@ -90,18 +93,6 @@ def get_log_path() -> str:
 
 
 def file_log(message: str) -> None:
-    """line = f"{now_text()} [{TAG}] {message}\n"
-    try:
-        with open(get_log_path(), "a", encoding="utf-8") as f:
-            f.write(line)
-            f.flush()
-    except Exception:
-        try:
-            with open(LOG_FILE_NAME, "a", encoding="utf-8") as f:
-                f.write(line)
-                f.flush()
-        except Exception:
-            pass"""
     pass
 
 
@@ -120,6 +111,154 @@ def android_log(message: str) -> None:
         except Exception as exc:
             file_log(f"android.util.Log failed: {exc}")
 
+
+def safe_float_from_engine(callable_value, default=0.0):
+    try:
+        return float(callable_value())
+    except Exception:
+        return float(default)
+
+
+def safe_int_from_engine(callable_value, default=0):
+    try:
+        return int(callable_value())
+    except Exception:
+        return int(default)
+
+
+def quality_label(value: int) -> str:
+    if value <= 0:
+        return "Normal"
+    if value == 1:
+        return "HiFi"
+    return "HiFi+"
+
+
+
+
+def quality_short_label(value: int) -> str:
+    if value <= 0:
+        return "N"
+    if value == 1:
+        return "H"
+    return "H+"
+
+
+def format_load_rate_percent(avg_process_ms: float, process_ms: float = 0.0) -> str:
+    """通知用の負荷率をパーセント文字列にする。
+
+    Java側に専用の負荷率APIが無い場合でも、既存の平均処理時間から
+    おおよそのDSP処理負荷を表示できるようにする。
+    48kHz系の短いリアルタイム処理では10msを1処理予算として扱い、
+    avgProcessMs / 10ms * 100 を目安値として表示する。
+    """
+    try:
+        base_ms = float(avg_process_ms)
+    except Exception:
+        base_ms = 0.0
+    if base_ms <= 0.0:
+        try:
+            base_ms = float(process_ms)
+        except Exception:
+            base_ms = 0.0
+    load_percent = max(0.0, min(150.0, (base_ms / 10.0) * 100.0))
+    return f"{load_percent:.1f}%"
+
+
+def update_runtime_notification(DSREAudioCaptureEngine=None) -> None:
+    if sys.platform != "android":
+        return
+    try:
+        from jnius import autoclass
+        if DSREAudioCaptureEngine is None:
+            DSREAudioCaptureEngine = autoclass("com.crossdarkrix.dsre_realtime.DSREAudioCaptureEngine")
+        PythonService = autoclass("org.kivy.android.PythonService")
+        service = PythonService.mService
+        if service is None:
+            return
+
+        BuildVersion = autoclass("android.os.Build$VERSION")
+        Context = autoclass("android.content.Context")
+        Notification = autoclass("android.app.Notification")
+        NotificationBuilder = autoclass("android.app.Notification$Builder")
+
+        quality = safe_int_from_engine(DSREAudioCaptureEngine.getQualityMode, DEFAULT_QUALITY)
+        mode = safe_int_from_engine(DSREAudioCaptureEngine.getProcessMode, PROCESS_MODE)
+        frames = safe_int_from_engine(DSREAudioCaptureEngine.getFramesRead, 0)
+        process_ms = safe_float_from_engine(DSREAudioCaptureEngine.getLastProcessMs, 0.0)
+        max_process_ms = safe_float_from_engine(DSREAudioCaptureEngine.getMaxProcessMs, 0.0)
+        avg_process_ms = safe_float_from_engine(DSREAudioCaptureEngine.getAvgProcessMs, process_ms)
+        recent_max_process_ms = safe_float_from_engine(DSREAudioCaptureEngine.getRecentMaxProcessMs, process_ms)
+        spike_count = safe_int_from_engine(DSREAudioCaptureEngine.getSpikeCount, 0)
+        recent_spike_count = safe_int_from_engine(DSREAudioCaptureEngine.getRecentSpikeCount, 0)
+        zero_writes = safe_int_from_engine(DSREAudioCaptureEngine.getWriteZeroCount, 0)
+        short_writes = safe_int_from_engine(DSREAudioCaptureEngine.getShortWriteCount, 0)
+        errors = safe_int_from_engine(DSREAudioCaptureEngine.getErrorCount, 0)
+        running = bool(DSREAudioCaptureEngine.isRunning())
+        cfg_quality = DEFAULT_QUALITY
+        try:
+            cfg_quality = int(load_mini_dsre_config().get("quality", DEFAULT_QUALITY))
+        except Exception:
+            cfg_quality = quality
+        quality_note = "" if cfg_quality == quality else f" / 設定: {quality_label(cfg_quality)}"
+        load_rate_text = format_load_rate_percent(avg_process_ms, process_ms)
+
+        line1 = "DSRE-Equalizerは動作中です。"
+        separator = "------------------------------"
+        line2 = f"クオリティ: {quality_label(quality)}{quality_note}  負荷率: {load_rate_text}"
+        privacy_line = "※DSRE-Equalizerは\n音声データを外部に送信しません。"
+        title = line1
+        collapsed_text = f"\n{line2}"
+        big_text = f"{line1}\n\n{separator}\n{line2}\n{separator}\n\n{privacy_line}"
+
+        if BuildVersion.SDK_INT >= 26:
+            NotificationChannel = autoclass("android.app.NotificationChannel")
+            NotificationManager = autoclass("android.app.NotificationManager")
+            manager = service.getSystemService(Context.NOTIFICATION_SERVICE)
+            channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "DSRE runtime status",
+                NotificationManager.IMPORTANCE_LOW,
+            )
+            channel.setDescription("DSRE realtime processing status")
+            try:
+                channel.setShowBadge(False)
+            except Exception:
+                pass
+            manager.createNotificationChannel(channel)
+            builder = NotificationBuilder(service, NOTIFICATION_CHANNEL_ID)
+        else:
+            manager = service.getSystemService(Context.NOTIFICATION_SERVICE)
+            builder = NotificationBuilder(service)
+
+        icon = service.getApplicationInfo().icon
+        if icon:
+            builder.setSmallIcon(icon)
+        builder.setContentTitle(title)
+        builder.setContentText(collapsed_text)
+        try:
+            style = Notification.BigTextStyle().bigText(big_text).setBigContentTitle(line1).setSummaryText(privacy_line)
+            builder.setStyle(style)
+        except Exception:
+            pass
+        builder.setOngoing(True)
+        builder.setOnlyAlertOnce(True)
+        builder.setShowWhen(False)
+
+        notification = builder.build()
+        # p4a/PythonService既定通知に戻る端末差を避けるため、notifyとstartForegroundの両方を試す。
+        try:
+            if manager is not None:
+                manager.notify(NOTIFICATION_ID, notification)
+        except Exception:
+            pass
+        try:
+            service.startForeground(NOTIFICATION_ID, notification)
+        except Exception:
+            pass
+    except Exception:
+        # 通知更新は補助表示なので、失敗しても音声処理は止めない。
+        pass
 
 def read_projection_state():
     if sys.platform != "android":
@@ -155,7 +294,8 @@ def load_mini_dsre_config():
         "threshold": MINI_THRESHOLD, "ratio": MINI_RATIO, "makeup": MINI_MAKEUP,
         "satDrive": MINI_SAT_DRIVE, "satMix": MINI_SAT_MIX, "outputGain": MINI_OUTPUT_GAIN,
         "assistGain": MINI_ASSIST_GAIN, "airMix": MINI_AIR_MIX, "airHpAlpha": MINI_AIR_HP_ALPHA,
-    }
+        "quality": DEFAULT_QUALITY,
+}
     try:
         path = os.path.join(get_log_directory(), CONFIG_FILE_NAME)
         if os.path.exists(path):
@@ -168,6 +308,32 @@ def load_mini_dsre_config():
         android_log(f"mini_dsre_config load failed: {exc}")
     return config
 
+def apply_config_to_engine(DSREAudioCaptureEngine, cfg) -> None:
+    try:
+        DSREAudioCaptureEngine.configureQuality(int(cfg.get("quality", DEFAULT_QUALITY)))
+    except Exception:
+        android_log("audio_capture_engine configureQuality unavailable; using engine default")
+    android_log(
+        f"audio_capture_engine apply_config "
+        f"quality={cfg.get('quality', DEFAULT_QUALITY)} "
+        f"threshold={cfg['threshold']} ratio={cfg['ratio']} makeup={cfg['makeup']} "
+        f"satDrive={cfg['satDrive']} satMix={cfg['satMix']} outputGain={cfg['outputGain']} "
+        f"assistGain={cfg['assistGain']} airMix={cfg['airMix']} airHpAlpha={cfg['airHpAlpha']}"
+    )
+    DSREAudioCaptureEngine.configureMiniDsre(
+        float(cfg["threshold"]),
+        float(cfg["ratio"]),
+        float(cfg["makeup"]),
+        float(cfg["satDrive"]),
+        float(cfg["satMix"]),
+        float(cfg["outputGain"]),
+    )
+    DSREAudioCaptureEngine.configureMiniDsreAssist(
+        float(cfg["assistGain"]),
+        float(cfg["airMix"]),
+        float(cfg["airHpAlpha"]),
+    )
+
 def start_audio_capture_if_possible():
     if sys.platform != "android":
         android_log("audio_capture_start skipped: not android")
@@ -176,15 +342,16 @@ def start_audio_capture_if_possible():
         from jnius import autoclass
         DSREAudioCaptureEngine = autoclass("com.crossdarkrix.dsre_realtime.DSREAudioCaptureEngine")
         if bool(DSREAudioCaptureEngine.isRunning()):
-            android_log("audio_capture_engine already running")
+            cfg = load_mini_dsre_config()
+            apply_config_to_engine(DSREAudioCaptureEngine, cfg)
+            update_runtime_notification(DSREAudioCaptureEngine)
+            android_log("audio_capture_engine already running; config refreshed")
             return
         cfg = load_mini_dsre_config()
-        android_log(f"audio_capture_engine configureMiniDsre threshold={cfg['threshold']} ratio={cfg['ratio']} makeup={cfg['makeup']} satDrive={cfg['satDrive']} satMix={cfg['satMix']} outputGain={cfg['outputGain']}")
-        DSREAudioCaptureEngine.configureMiniDsre(float(cfg["threshold"]), float(cfg["ratio"]), float(cfg["makeup"]), float(cfg["satDrive"]), float(cfg["satMix"]), float(cfg["outputGain"]))
-        android_log(f"audio_capture_engine configureMiniDsreAssist assistGain={cfg['assistGain']} airMix={cfg['airMix']} airHpAlpha={cfg['airHpAlpha']}")
-        DSREAudioCaptureEngine.configureMiniDsreAssist(float(cfg["assistGain"]), float(cfg["airMix"]), float(cfg["airHpAlpha"]))
-        android_log(f"audio_capture_engine startStablePassthroughFromStoredProjection requested gain={cfg['gain']} mode={cfg['mode']}")
+        apply_config_to_engine(DSREAudioCaptureEngine, cfg)
+        android_log(f"audio_capture_engine startStablePassthroughFromStoredProjection requested gain={cfg['gain']} mode={cfg['mode']} quality={cfg.get('quality', DEFAULT_QUALITY)}")
         DSREAudioCaptureEngine.startStablePassthroughFromStoredProjection(48000, 2, float(cfg["gain"]), int(cfg["mode"]))
+        update_runtime_notification(DSREAudioCaptureEngine)
         android_log("audio_capture_engine startStablePassthroughFromStoredProjection returned")
     except Exception as exc:
         android_log(f"audio_capture_engine start failed: {exc}")
@@ -209,6 +376,14 @@ def log_audio_engine_state():
             f"shortWrites={int(DSREAudioCaptureEngine.getShortWriteCount())} "
             f"errorCount={int(DSREAudioCaptureEngine.getErrorCount())} "
             f"mode={int(DSREAudioCaptureEngine.getProcessMode())} "
+            f"qualityMode={int(DSREAudioCaptureEngine.getQualityMode())} "
+            f"processMs={float(DSREAudioCaptureEngine.getLastProcessMs()):.3f} "
+            f"maxProcessMs={float(DSREAudioCaptureEngine.getMaxProcessMs()):.3f} "
+            f"avgProcessMs={float(DSREAudioCaptureEngine.getAvgProcessMs()):.3f} "
+            f"recentMaxProcessMs={float(DSREAudioCaptureEngine.getRecentMaxProcessMs()):.3f} "
+            f"spikeCount={int(DSREAudioCaptureEngine.getSpikeCount())} "
+            f"recentSpikeCount={int(DSREAudioCaptureEngine.getRecentSpikeCount())} "
+            f"processCalls={int(DSREAudioCaptureEngine.getProcessCalls())} "
             f"processorPeak={float(DSREAudioCaptureEngine.getLastProcessorPeak()):.6f} "
             f"gainReduction={float(DSREAudioCaptureEngine.getLastGainReduction()):.6f} "
             f"compressorActive={int(DSREAudioCaptureEngine.getLastCompressorActiveSamples())} "
@@ -226,6 +401,7 @@ def log_audio_engine_state():
             f"error={str(DSREAudioCaptureEngine.getLastError() or '')} "
             f"stage={str(DSREAudioCaptureEngine.getStage() or '')}"
         )
+        update_runtime_notification(DSREAudioCaptureEngine)
     except Exception as exc:
         android_log(f"audio_engine_state failed: {exc}")
 
@@ -252,10 +428,6 @@ def describe_environment() -> None:
 def main() -> None:
     describe_environment()
     tick = 0
-    try:
-        os.remove(os.path.join(get_log_directory(), "dsre_java_bridge.log"))
-    except:
-        pass
     while True:     
         tick += 1
         if tick == 1 or tick % 5 == 0:
