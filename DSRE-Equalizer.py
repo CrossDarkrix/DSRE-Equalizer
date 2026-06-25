@@ -265,7 +265,7 @@ I18N = {
         'param_outputGain': '出力ゲイン',
         'param_assistGain': '補助ゲイン',
         'param_airMix': '空気感の混合度合い',
-        'param_airHpAlpha': '空気感の透明度度合い',
+        'param_airHpAlpha': '空気感の透明度合い',
         'param_quality': '音質',
     },
     'en': {
