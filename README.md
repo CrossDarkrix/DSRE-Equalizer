@@ -111,6 +111,28 @@ Assist Gain: 0.30 - 0.40
 
 ---
 
+## Related Projects
+
+### DSRE-Audio-Enhancer
+
+[DSRE-Audio-Enhancer](https://github.com/CrossDarkrix/DSRE-Audio-Enhancer) is a high-performance audio enhancement tool that can batch-process audio files and convert them into high-resolution audio. Inspired by Sony DSEE HX, it uses a frequency-enhancement algorithm that does not rely on deep learning, allowing large numbers of files to be processed quickly without requiring extensive computing resources.
+
+Key features include:
+
+- **Batch processing:** Convert multiple audio files in a single operation.
+- **Multiple format support:** Supports formats including WAV, MP3, FLAC, and M4A.
+- **Cover art and metadata preservation:** Retains cover images and metadata without requiring manual editing.
+- **Flexible parameter configuration:** Adjust settings such as modulation count, decay, and high-pass filters.
+- **Fast and stable processing:** Operates without relying on deep-learning models.
+
+### DSRE-Mobile
+
+[DSRE-Mobile](https://github.com/CrossDarkrix/DSRE-Mobile) is an Android port of **DSRE / Deep Sound Resolution Enhancer**. It enhances audio files locally on Android devices using a lightweight, DSP-oriented processing pipeline and a native FFmpeg-based audio backend.
+
+It is intended for local, batch-oriented audio enhancement on Android and supports configurable enhancement parameters, multiple output formats, and streaming chunk-based processing.
+
+---
+
 ## Current Behavior and Limitations
 
 DSRE-Equalizer operates within the standard limitations imposed by Android.
@@ -161,4 +183,3 @@ DSRE-Equalizer is an experimental audio processing application.
 Behavior may vary depending on the device, Android version, playback application, and audio output route.
 
 This application does not guarantee system-wide audio replacement or zero-latency processing.
-
